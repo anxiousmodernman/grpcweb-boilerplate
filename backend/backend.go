@@ -68,7 +68,7 @@ func combine(a, b []string) []string {
 	sort.Strings(both)
 	var val string
 	var res []string
-	for _, x := range res {
+	for _, x := range both {
 		if strings.TrimSpace(x) == strings.TrimSpace(val) {
 			continue
 		}

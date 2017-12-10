@@ -22,5 +22,5 @@ func TestBackendData(t *testing.T) {
 	c := combine(a, b)
 	fmt.Println(c)
 
-	assert(c, "10.2.1.2x", "10.2.1.21", "10.2.1.56")
+	assert(c, "10.2.1.20", "10.2.1.21", "10.2.1.56")
 }
