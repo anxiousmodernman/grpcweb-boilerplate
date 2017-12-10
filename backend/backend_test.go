@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestBackendData(t *testing.T) {
+func TestCombine(t *testing.T) {
 
 	assert := func(l []string, r ...string) {
 		for i, x := range l {

@@ -19,23 +19,36 @@ type Backend struct {
 // Ensure struct implements interface
 var _ server.BackendServer = (*Backend)(nil)
 
-// We implement this
-//type ProxyServer interface {
-//	State(context.Context, *StateRequest) (*ProxyState, error)
-//	Put(context.Context, *BackendT) (*OpResult, error)
-//	Remove(context.Context, *BackendT) (*OpResult, error)
-//}
-
+// Proxy is our server.ProxyServer implementation.
 type Proxy struct {
 	DB *storm.DB
 }
 
+// assert that Proxy is a server.ProxyServer at compile time.
 var _ server.ProxyServer = (*Proxy)(nil)
 
-func (p *Proxy) State(context.Context, *server.StateRequest) (*server.ProxyState, error) {
+// State returns the state of the proxy. The number of backends returned is
+// controlled by the domain field of the request. A blank domain returns all.
+func (p *Proxy) State(_ context.Context, req *server.StateRequest) (*server.ProxyState, error) {
+	var resp server.ProxyState
+	var backends []*BackendData
+	var err error
+	if req.Domain == "" {
+		err = p.DB.All(&backends)
+	} else {
+		err = p.DB.Find("Domain", req.Domain, &backends)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("db error: %v", err)
+	}
+	for _, b := range backends {
+		resp.Backends = append(resp.Backends, b.AsBackendT())
+	}
+
 	return nil, nil
 }
 
+// Put adds a backend to our pool of proxied Backends.
 func (p *Proxy) Put(ctx context.Context, b *server.BackendT) (*server.OpResult, error) {
 	var bd BackendData
 	err := p.DB.One("Domain", b.Domain, &bd)
@@ -78,6 +91,7 @@ func combine(a, b []string) []string {
 	return res
 }
 
+// Remove ... TODO
 func (p *Proxy) Remove(context.Context, *server.BackendT) (*server.OpResult, error) { return nil, nil }
 
 // BackendData is our type for the storm ORM. We can define field-level
@@ -86,6 +100,14 @@ type BackendData struct {
 	ID     int
 	Domain string `storm:"unique"`
 	IPs    []string
+}
+
+// AsBackendT is a conversion method to a grpc-sendable type.
+func (bd BackendData) AsBackendT() *server.BackendT {
+	var b server.BackendT
+	b.Domain = bd.Domain
+	b.Ips = bd.IPs
+	return &b
 }
 
 func (bd BackendData) PutIP(ip string) error {
