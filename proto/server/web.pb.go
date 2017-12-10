@@ -10,6 +10,10 @@ It is generated from these files:
 	proto/web.proto
 
 It has these top-level messages:
+	BackendT
+	ProxyState
+	OpResult
+	StateRequest
 */
 package server
 
@@ -33,6 +37,111 @@ var _ = math.Inf
 // A compilation error at this line likely means your copy of the
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
+
+type BackendT struct {
+	Domain string   `protobuf:"bytes,1,opt,name=domain" json:"domain,omitempty"`
+	Ips    []string `protobuf:"bytes,2,rep,name=ips" json:"ips,omitempty"`
+}
+
+func (m *BackendT) Reset()                    { *m = BackendT{} }
+func (m *BackendT) String() string            { return proto.CompactTextString(m) }
+func (*BackendT) ProtoMessage()               {}
+func (*BackendT) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
+
+func (m *BackendT) GetDomain() string {
+	if m != nil {
+		return m.Domain
+	}
+	return ""
+}
+
+func (m *BackendT) GetIps() []string {
+	if m != nil {
+		return m.Ips
+	}
+	return nil
+}
+
+type ProxyState struct {
+	Backends []*BackendT `protobuf:"bytes,1,rep,name=backends" json:"backends,omitempty"`
+	// a status message, or an error message.
+	Status string `protobuf:"bytes,2,opt,name=status" json:"status,omitempty"`
+	// an error code
+	Code int32 `protobuf:"varint,3,opt,name=code" json:"code,omitempty"`
+}
+
+func (m *ProxyState) Reset()                    { *m = ProxyState{} }
+func (m *ProxyState) String() string            { return proto.CompactTextString(m) }
+func (*ProxyState) ProtoMessage()               {}
+func (*ProxyState) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
+
+func (m *ProxyState) GetBackends() []*BackendT {
+	if m != nil {
+		return m.Backends
+	}
+	return nil
+}
+
+func (m *ProxyState) GetStatus() string {
+	if m != nil {
+		return m.Status
+	}
+	return ""
+}
+
+func (m *ProxyState) GetCode() int32 {
+	if m != nil {
+		return m.Code
+	}
+	return 0
+}
+
+type OpResult struct {
+	Code   int32  `protobuf:"varint,1,opt,name=code" json:"code,omitempty"`
+	Status string `protobuf:"bytes,2,opt,name=status" json:"status,omitempty"`
+}
+
+func (m *OpResult) Reset()                    { *m = OpResult{} }
+func (m *OpResult) String() string            { return proto.CompactTextString(m) }
+func (*OpResult) ProtoMessage()               {}
+func (*OpResult) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
+
+func (m *OpResult) GetCode() int32 {
+	if m != nil {
+		return m.Code
+	}
+	return 0
+}
+
+func (m *OpResult) GetStatus() string {
+	if m != nil {
+		return m.Status
+	}
+	return ""
+}
+
+type StateRequest struct {
+	Domain string `protobuf:"bytes,1,opt,name=domain" json:"domain,omitempty"`
+}
+
+func (m *StateRequest) Reset()                    { *m = StateRequest{} }
+func (m *StateRequest) String() string            { return proto.CompactTextString(m) }
+func (*StateRequest) ProtoMessage()               {}
+func (*StateRequest) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
+
+func (m *StateRequest) GetDomain() string {
+	if m != nil {
+		return m.Domain
+	}
+	return ""
+}
+
+func init() {
+	proto.RegisterType((*BackendT)(nil), "web.BackendT")
+	proto.RegisterType((*ProxyState)(nil), "web.ProxyState")
+	proto.RegisterType((*OpResult)(nil), "web.OpResult")
+	proto.RegisterType((*StateRequest)(nil), "web.StateRequest")
+}
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ context.Context
@@ -72,18 +181,160 @@ var _Backend_serviceDesc = grpc.ServiceDesc{
 	Metadata:    "proto/web.proto",
 }
 
+// Client API for Proxy service
+
+type ProxyClient interface {
+	State(ctx context.Context, in *StateRequest, opts ...grpc.CallOption) (*ProxyState, error)
+	Put(ctx context.Context, in *BackendT, opts ...grpc.CallOption) (*OpResult, error)
+	Remove(ctx context.Context, in *BackendT, opts ...grpc.CallOption) (*OpResult, error)
+}
+
+type proxyClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewProxyClient(cc *grpc.ClientConn) ProxyClient {
+	return &proxyClient{cc}
+}
+
+func (c *proxyClient) State(ctx context.Context, in *StateRequest, opts ...grpc.CallOption) (*ProxyState, error) {
+	out := new(ProxyState)
+	err := grpc.Invoke(ctx, "/web.Proxy/State", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *proxyClient) Put(ctx context.Context, in *BackendT, opts ...grpc.CallOption) (*OpResult, error) {
+	out := new(OpResult)
+	err := grpc.Invoke(ctx, "/web.Proxy/Put", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *proxyClient) Remove(ctx context.Context, in *BackendT, opts ...grpc.CallOption) (*OpResult, error) {
+	out := new(OpResult)
+	err := grpc.Invoke(ctx, "/web.Proxy/Remove", in, out, c.cc, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Server API for Proxy service
+
+type ProxyServer interface {
+	State(context.Context, *StateRequest) (*ProxyState, error)
+	Put(context.Context, *BackendT) (*OpResult, error)
+	Remove(context.Context, *BackendT) (*OpResult, error)
+}
+
+func RegisterProxyServer(s *grpc.Server, srv ProxyServer) {
+	s.RegisterService(&_Proxy_serviceDesc, srv)
+}
+
+func _Proxy_State_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProxyServer).State(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/web.Proxy/State",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProxyServer).State(ctx, req.(*StateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Proxy_Put_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BackendT)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProxyServer).Put(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/web.Proxy/Put",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProxyServer).Put(ctx, req.(*BackendT))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Proxy_Remove_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BackendT)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProxyServer).Remove(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/web.Proxy/Remove",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProxyServer).Remove(ctx, req.(*BackendT))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+var _Proxy_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "web.Proxy",
+	HandlerType: (*ProxyServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "State",
+			Handler:    _Proxy_State_Handler,
+		},
+		{
+			MethodName: "Put",
+			Handler:    _Proxy_Put_Handler,
+		},
+		{
+			MethodName: "Remove",
+			Handler:    _Proxy_Remove_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "proto/web.proto",
+}
+
 func init() { proto.RegisterFile("proto/web.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
-	// 149 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x2f, 0x28, 0xca, 0x2f,
-	0xc9, 0xd7, 0x2f, 0x4f, 0x4d, 0xd2, 0x03, 0xb3, 0x84, 0x98, 0xcb, 0x53, 0x93, 0xa4, 0x2c, 0xd2,
-	0x33, 0x4b, 0x32, 0x4a, 0x93, 0xf4, 0x92, 0xf3, 0x73, 0xf5, 0xb3, 0xf2, 0x33, 0x12, 0xf3, 0x92,
-	0x8a, 0x12, 0xf3, 0x52, 0x32, 0xf2, 0x8b, 0x8a, 0x4b, 0xf4, 0xc1, 0xca, 0x92, 0x4a, 0xd3, 0x20,
-	0x0c, 0xfd, 0xf4, 0xfc, 0x82, 0x8c, 0xd4, 0xa2, 0xac, 0x62, 0x88, 0x76, 0x23, 0x4e, 0x2e, 0x76,
-	0xa7, 0xc4, 0xe4, 0xec, 0xd4, 0xbc, 0x14, 0xa7, 0xea, 0x5f, 0x0e, 0xd6, 0x78, 0xcc, 0x49, 0x2f,
-	0x2a, 0x48, 0x2e, 0x4f, 0x4d, 0xd2, 0x4d, 0xca, 0xcf, 0xcc, 0x49, 0x2d, 0x2a, 0xc8, 0x49, 0x2c,
-	0x49, 0x85, 0x1a, 0x99, 0x9c, 0x93, 0x99, 0x9a, 0x57, 0x12, 0x45, 0x9e, 0xe6, 0xe2, 0xd4, 0xa2,
-	0xb2, 0xd4, 0xa2, 0x24, 0x36, 0x30, 0xcf, 0x18, 0x10, 0x00, 0x00, 0xff, 0xff, 0xdc, 0x58, 0xbd,
-	0x67, 0xe0, 0x00, 0x00, 0x00,
+	// 346 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x51, 0x3d, 0x4f, 0xe3, 0x40,
+	0x14, 0x8c, 0xcf, 0x97, 0x5c, 0xf2, 0xee, 0x4e, 0x81, 0x2d, 0x90, 0x95, 0xca, 0xb2, 0x04, 0x32,
+	0x45, 0x62, 0x29, 0x20, 0x44, 0x41, 0x81, 0xf2, 0x07, 0x88, 0x0c, 0x15, 0xdd, 0xae, 0xfd, 0x88,
+	0x1d, 0xec, 0x5d, 0xb3, 0x1f, 0x49, 0x28, 0xa8, 0xf9, 0xcf, 0x54, 0xc8, 0xeb, 0x7c, 0x51, 0x44,
+	0x48, 0x74, 0x33, 0x3b, 0xfb, 0xe6, 0xcd, 0xe8, 0x41, 0xbf, 0x92, 0x42, 0x8b, 0x68, 0x89, 0x6c,
+	0x64, 0x11, 0x71, 0x97, 0xc8, 0x06, 0xd7, 0xb3, 0x5c, 0x67, 0x86, 0x8d, 0x12, 0x51, 0x46, 0x73,
+	0x91, 0x51, 0xce, 0x24, 0xe5, 0x69, 0x26, 0xa4, 0xd2, 0x91, 0xfd, 0xc6, 0xcc, 0x53, 0x03, 0xa2,
+	0x99, 0xa8, 0x32, 0x94, 0x73, 0xd5, 0x8c, 0x07, 0x97, 0xd0, 0x9d, 0xd0, 0xe4, 0x19, 0x79, 0xfa,
+	0x40, 0x4e, 0xa0, 0x93, 0x8a, 0x92, 0xe6, 0xdc, 0x73, 0x7c, 0x27, 0xec, 0xc5, 0x6b, 0x46, 0x8e,
+	0xc0, 0xcd, 0x2b, 0xe5, 0xfd, 0xf2, 0xdd, 0xb0, 0x17, 0xd7, 0x30, 0x48, 0x00, 0xa6, 0x52, 0xac,
+	0x5e, 0xef, 0x35, 0xd5, 0x48, 0xce, 0xa1, 0xcb, 0x1a, 0x0f, 0xe5, 0x39, 0xbe, 0x1b, 0xfe, 0x1d,
+	0xff, 0x1f, 0xd5, 0x01, 0x37, 0xc6, 0xf1, 0x56, 0xae, 0x57, 0x28, 0x4d, 0xb5, 0xa9, 0xdd, 0xec,
+	0x8a, 0x86, 0x11, 0x02, 0xbf, 0x13, 0x91, 0xa2, 0xe7, 0xfa, 0x4e, 0xd8, 0x8e, 0x2d, 0x0e, 0xae,
+	0xa0, 0x7b, 0x57, 0xc5, 0xa8, 0x4c, 0xa1, 0xb7, 0xba, 0xb3, 0xd3, 0x0f, 0x79, 0x05, 0x67, 0xf0,
+	0xcf, 0xe6, 0x8a, 0xf1, 0xc5, 0xa0, 0xd2, 0x87, 0x6a, 0x8d, 0x7b, 0xf0, 0x67, 0x9d, 0x70, 0xfc,
+	0xee, 0x40, 0xdb, 0x16, 0x22, 0x43, 0x68, 0x37, 0xa5, 0x8e, 0x6d, 0x85, 0x7d, 0xa3, 0x41, 0xdf,
+	0x3e, 0xed, 0x8a, 0x07, 0x2d, 0x72, 0x0a, 0xee, 0xd4, 0x68, 0xf2, 0xb5, 0xef, 0xa0, 0xa1, 0x9b,
+	0xf0, 0x41, 0x8b, 0x84, 0xd0, 0x89, 0xb1, 0x14, 0x0b, 0xfc, 0xee, 0xe7, 0xe4, 0xed, 0xe3, 0xf6,
+	0x66, 0xef, 0x98, 0x94, 0xaf, 0x72, 0x61, 0x54, 0x29, 0x52, 0x94, 0xbc, 0xa4, 0x3c, 0x9a, 0xc9,
+	0x2a, 0x59, 0x22, 0x1b, 0x32, 0x91, 0x17, 0x28, 0xab, 0x82, 0x6a, 0x5c, 0x1f, 0x36, 0x29, 0x72,
+	0xe4, 0xfa, 0xf1, 0x87, 0xd3, 0x0a, 0xe5, 0x02, 0x25, 0xeb, 0x58, 0x76, 0xf1, 0x19, 0x00, 0x00,
+	0xff, 0xff, 0x3e, 0xbe, 0xac, 0xd5, 0x67, 0x02, 0x00, 0x00,
 }

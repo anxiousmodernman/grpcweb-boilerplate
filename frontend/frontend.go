@@ -5,7 +5,7 @@ import (
 
 	"honnef.co/go/js/dom"
 
-	"github.com/johanbrandhorst/grpcweb-boilerplate/proto/client"
+	"github.com/anxiousmodernman/grpcweb-boilerplate/proto/client"
 )
 
 // Build this snippet with GopherJS, minimize the output and
@@ -36,7 +36,7 @@ func setup() {
 	serverAddr := strings.TrimSuffix(document.BaseURI(), "/")
 
 	// TODO: Use functions exposed by generated interface
-	_ = client.NewBackendClient(serverAddr)
+	_ = client.NewProxyClient(serverAddr)
 
 	document.Body().SetInnerHTML(`<div><h2>GopherJS gRPC-Web is great!</h2></div>`)
 }

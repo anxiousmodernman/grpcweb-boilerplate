@@ -17,11 +17,12 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
 
-	"github.com/johanbrandhorst/grpcweb-boilerplate/backend"
-	"github.com/johanbrandhorst/grpcweb-boilerplate/frontend/bundle"
-	"github.com/johanbrandhorst/grpcweb-boilerplate/proto/server"
+	"github.com/anxiousmodernman/grpcweb-boilerplate/backend"
+	"github.com/anxiousmodernman/grpcweb-boilerplate/frontend/bundle"
+	"github.com/anxiousmodernman/grpcweb-boilerplate/proto/server"
 )
 
+// TODO pass this down to my object
 var logger *logrus.Logger
 
 func init() {
@@ -39,7 +40,7 @@ func init() {
 
 func main() {
 	gs := grpc.NewServer()
-	server.RegisterBackendServer(gs, &backend.Backend{})
+	server.RegisterProxyServer(gs, &backend.Proxy{})
 	wrappedServer := grpcweb.WrapServer(gs)
 
 	clientCreds, err := credentials.NewClientTLSFromFile("./cert.pem", "")
