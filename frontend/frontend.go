@@ -1,7 +1,6 @@
-package main
-
-// Build output write it to html/frontend.js
 //go:generate gopherjs build frontend.go -m -o html/frontend.js
+//go:generate bash -c "go run assets_generate.go"
+package main
 
 import (
 	"context"
@@ -239,7 +238,7 @@ func (n *NavComponent) Render() vecty.ComponentOrHTML {
 			&NavItem{Name: "third"},
 			&NavItem{Name: "fourth"},
 			&NavItem{Name: "fifth"},
-			&NavItem{Name: "shoe"},
+			&NavItem{Name: "shoe2"},
 			ulstyle,
 		),
 	)
@@ -275,8 +274,8 @@ func (ni *NavItem) Render() vecty.ComponentOrHTML {
 		)
 	}
 
-	var colr = ifElse(ni.hovered, "#92CFE0", "#444000")
-	var bckgrnd = ifElse(ni.hovered, "#005f5f", "#444444")
+	var colr = ifElse(ni.hovered, "#92CFE0", "#918D55")
+	var bckgrnd = ifElse(ni.hovered, "#005f5f", "#918B30")
 
 	var astyle vecty.MarkupList
 	astyle = vecty.Markup(
@@ -296,14 +295,14 @@ func (ni *NavItem) Render() vecty.ComponentOrHTML {
 	})
 
 	return elem.ListItem(
-		listyle,
 		elem.Anchor(
-			vecty.Markup(mo),
-			vecty.Markup(ml),
 			astyle,
 			vecty.Markup(vecty.Attribute("href", "#")),
 			vecty.Text(ni.Name),
 		),
+		vecty.Markup(mo),
+		vecty.Markup(ml),
+		listyle,
 	)
 }
 
