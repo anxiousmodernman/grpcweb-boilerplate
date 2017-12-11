@@ -33,12 +33,7 @@ var dims Dims
 var document = dom.GetWindow().Document().(dom.HTMLDocument)
 
 // no-op main
-func main() {
-
-	dims.Width = js.Global.Get("window").Get("innerWidth").Int64()
-	dims.Height = js.Global.Get("window").Get("innerHeight").Int64()
-	log.Println("DIMZ", dims)
-}
+func main() {}
 
 // Ensure our setup() gets called as soon as the DOM has loaded
 func init() {
@@ -53,15 +48,13 @@ func setup() {
 
 	w := js.Global.Get("window")
 	w = w.Call("addEventListener", "resize", func(e vecty.Event) {
-		// TODO: use debounce func here
+		// TODO: use debounce func here?
 		dims.Width = js.Global.Get("window").Get("innerWidth").Int64()
 		dims.Height = js.Global.Get("window").Get("innerHeight").Int64()
 		vecty.Rerender(p)
 	})
 
 	serverAddr := strings.TrimSuffix(document.BaseURI(), "/")
-
-	// TODO: Use functions exposed by generated interface
 	apiClient = client.NewProxyClient(serverAddr)
 
 	vecty.RenderBody(p)
