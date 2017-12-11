@@ -1,30 +1,45 @@
 package main
 
+// Build output write it to html/frontend.js
+//go:generate gopherjs build frontend.go -m -o html/frontend.js
+
 import (
+	"context"
+	"log"
 	"strings"
 
 	"honnef.co/go/js/dom"
 
+	"github.com/anxiousmodernman/grpcweb-boilerplate/frontend/store"
 	"github.com/anxiousmodernman/grpcweb-boilerplate/proto/client"
 	"github.com/gopherjs/gopherjs/js"
 	vecty "github.com/gopherjs/vecty"
 	"github.com/gopherjs/vecty/elem"
 	"github.com/gopherjs/vecty/event"
+	"github.com/gopherjs/vecty/prop"
+	"github.com/gopherjs/vecty/style"
 )
 
-// Build this snippet with GopherJS, minimize the output and
-// write it to html/frontend.js
-//go:generate gopherjs build frontend.go -m -o html/frontend.js
+var apiClient client.ProxyClient
 
-// Integrate generated JS into a Go file for static loading.
-//go:generate bash -c "go run assets_generate.go"
+var state *store.Store
 
-// This constant is very useful for interacting with
-// the DOM dynamically
+// Dims is a type for window dimensions
+type Dims struct {
+	Width, Height int64
+}
+
+var dims Dims
+
 var document = dom.GetWindow().Document().(dom.HTMLDocument)
 
-// Define no-op main since it doesn't run when we want it to
-func main() {}
+// no-op main
+func main() {
+
+	dims.Width = js.Global.Get("window").Get("innerWidth").Int64()
+	dims.Height = js.Global.Get("window").Get("innerHeight").Int64()
+	log.Println("DIMZ", dims)
+}
 
 // Ensure our setup() gets called as soon as the DOM has loaded
 func init() {
@@ -33,35 +48,27 @@ func init() {
 	})
 }
 
-// Setup is where we do the real work.
 func setup() {
+	state = store.NewStore()
 	p := &Page{}
 
 	w := js.Global.Get("window")
-	w = w.Call("addEventListener", "resize", func(e vecty.Event) { // avoid duplicate body
+	w = w.Call("addEventListener", "resize", func(e vecty.Event) {
 		// TODO: use debounce func here
 		dims.Width = js.Global.Get("window").Get("innerWidth").Int64()
 		dims.Height = js.Global.Get("window").Get("innerHeight").Int64()
 		vecty.Rerender(p)
 	})
-	// This is the address to the server, and should be used
-	// when creating clients.
+
 	serverAddr := strings.TrimSuffix(document.BaseURI(), "/")
 
 	// TODO: Use functions exposed by generated interface
-	_ = client.NewProxyClient(serverAddr)
+	apiClient = client.NewProxyClient(serverAddr)
 
-	//document.Body().SetInnerHTML(`<div><h2>GopherJS gRPC-Web is great!</h2></div>`)
 	vecty.RenderBody(p)
 }
 
-type Dims struct {
-	Width, Height int64
-}
-
-var dims Dims
-
-// Page ...
+// Page returns a Body element suitable for vecty.RenderBody
 type Page struct {
 	vecty.Core
 }
@@ -71,12 +78,127 @@ func (p *Page) Render() vecty.ComponentOrHTML {
 
 	return elem.Body(
 		vecty.Markup(
-			vecty.Style("margin", "0"),
+			style.Margin(style.Px(0)),
 			vecty.Style("padding", "0"),
 			vecty.Style("background", "#ccc"),
 		),
 		elem.Header(
 			&NavComponent{},
+		),
+		&BackendList{},
+	)
+}
+
+// BackendList shows our configured proxy's state.
+type BackendList struct {
+	vecty.Core
+	Items []*BackendItem
+}
+
+// Render implements vecty.ComponentOrHTML
+func (bl *BackendList) Render() vecty.ComponentOrHTML {
+
+	buttonClicked := event.Click(func(e *vecty.Event) {
+		ctx := context.Background()
+		req := &client.StateRequest{}
+		// we use a goroutine here to avoid error from gopherjs:
+		// runtime error: cannot block in JavaScript callback, fix by wrapping code in goroutine
+		go func() {
+			resp, err := apiClient.State(ctx, req)
+			if err != nil {
+				log.Println("ERROR:", err)
+			}
+
+			var listItems []*BackendItem
+			for _, li := range resp.Backends {
+				bi := &BackendItem{Domain: li.Domain}
+				listItems = append(listItems, bi)
+			}
+			bl.Items = listItems
+			vecty.Rerender(bl)
+		}()
+	})
+
+	var items []vecty.MarkupOrChild
+	for _, bi := range bl.Items {
+		items = append(items, elem.ListItem(
+			elem.Div(vecty.Text(bi.Domain), vecty.Text(bi.IP)),
+		))
+	}
+
+	return elem.Div(
+		elem.UnorderedList(items...),
+		elem.Button(
+			vecty.Text("Refresh"),
+			vecty.Markup(buttonClicked),
+		),
+		&AddProxyForm{},
+	)
+
+}
+
+// BackendItem ...
+type BackendItem struct {
+	Domain string
+	IP     string
+	vecty.Core
+}
+
+// Render implements vecty.ComponentOrHTML
+func (bl *BackendItem) Render() vecty.ComponentOrHTML {
+	return elem.ListItem(
+		elem.Div(
+			vecty.Text(bl.Domain),
+			vecty.Text(bl.IP),
+		),
+	)
+}
+
+// AddProxyForm form is a small stateful component. IP and Domain are set on the
+// fly when text in the input box changes. The contents of IP and Domain
+// populate a request to the gRPC backend via websocket transport.
+type AddProxyForm struct {
+	vecty.Core
+	IP     string
+	Domain string
+}
+
+// onIPInput modifies our internal state. We maintain internal state to collect
+// data before we send it to the server.
+func (apf *AddProxyForm) onIPInput(e *vecty.Event) {
+	apf.IP = e.Target.Get("value").String()
+	vecty.Rerender(apf)
+}
+
+func (apf *AddProxyForm) onDomainInput(e *vecty.Event) {
+	apf.Domain = e.Target.Get("value").String()
+	vecty.Rerender(apf)
+}
+
+func (apf *AddProxyForm) onSubmit(e *vecty.Event) {
+	ctx := context.Background()
+	req := &client.BackendT{}
+	req.Domain = apf.Domain
+	req.Ips = []string{apf.IP}
+	go func() {
+		_, err := apiClient.Put(ctx, req)
+		if err != nil {
+			log.Println("ERROR:", err)
+		}
+		vecty.Rerender(apf)
+	}()
+}
+
+// Render implements vecty.ComponentOrHTML
+func (apf *AddProxyForm) Render() vecty.ComponentOrHTML {
+	return elem.Div(
+		elem.Label(vecty.Text("domain")),
+		elem.Input(vecty.Markup(prop.Value(apf.Domain), event.Input(apf.onDomainInput))),
+		elem.Label(vecty.Text("ip")),
+		elem.Input(vecty.Markup(prop.Value(apf.IP), event.Input(apf.onIPInput))),
+		elem.Button(
+			vecty.Text("Add"),
+			vecty.Markup(event.Click(apf.onSubmit)),
 		),
 	)
 }
@@ -87,19 +209,11 @@ type NavComponent struct {
 	Items []*NavItem
 }
 
-// Render ...
+// Render implements vecty.ComponentOrHTML
 func (n *NavComponent) Render() vecty.ComponentOrHTML {
 
 	var ulstyle vecty.MarkupList
 
-	ulstyle = vecty.Markup(
-
-		vecty.Style("list-style", "none"),
-		vecty.Style("background-color", "#444"),
-		vecty.Style("text-align", "center"),
-		vecty.Style("padding", "0"),
-		vecty.Style("margin", "0"),
-	)
 	if dims.Width > 600 {
 		ulstyle = vecty.Markup(
 			vecty.Style("list-style", "none"),
@@ -107,6 +221,14 @@ func (n *NavComponent) Render() vecty.ComponentOrHTML {
 			vecty.Style("margin", "auto"),
 			vecty.Style("width", "100%"),
 			vecty.Style("overflow", "auto"),
+		)
+	} else {
+		ulstyle = vecty.Markup(
+			vecty.Style("list-style", "none"),
+			vecty.Style("background-color", "#444"),
+			vecty.Style("text-align", "center"),
+			vecty.Style("padding", "0"),
+			vecty.Style("margin", "0"),
 		)
 	}
 
@@ -127,20 +249,12 @@ func (n *NavComponent) Render() vecty.ComponentOrHTML {
 type NavItem struct {
 	vecty.Core
 	hovered bool
-	active  bool
 	Name    string
 }
 
-// Render ...
+// Render implements vecty.ComponentOrHTML
 func (ni *NavItem) Render() vecty.ComponentOrHTML {
 	var listyle vecty.MarkupList
-	listyle = vecty.Markup(
-		vecty.Style("font-family", "'Oswald', sans-serif"),
-		vecty.Style("font-size", "1.2em"),
-		vecty.Style("line-height", "40px"),
-		vecty.Style("height", "40px"),
-		vecty.Style("border-bottom", "1px solid #888"),
-	)
 
 	if dims.Width > 600 {
 		listyle = vecty.Markup(
@@ -151,14 +265,18 @@ func (ni *NavItem) Render() vecty.ComponentOrHTML {
 			vecty.Style("width", "120px"),
 			vecty.Style("float", "left"),
 		)
+	} else {
+		listyle = vecty.Markup(
+			vecty.Style("font-family", "'Oswald', sans-serif"),
+			vecty.Style("font-size", "1.2em"),
+			vecty.Style("line-height", "40px"),
+			vecty.Style("height", "40px"),
+			vecty.Style("border-bottom", "1px solid #888"),
+		)
 	}
 
-	var colr = "#fff"
-	var bckgrnd = "#444"
-	if ni.hovered {
-		colr = "#005f5f"
-		bckgrnd = "#005f5f"
-	}
+	var colr = ifElse(ni.hovered, "#92CFE0", "#444000")
+	var bckgrnd = ifElse(ni.hovered, "#005f5f", "#444444")
 
 	var astyle vecty.MarkupList
 	astyle = vecty.Markup(
@@ -189,6 +307,14 @@ func (ni *NavItem) Render() vecty.ComponentOrHTML {
 	)
 }
 
+// if b, then i else e.
+func ifElse(b bool, i, e string) string {
+	if b {
+		return i
+	}
+	return e
+}
+
 // MediaQuery ...
 type MediaQuery struct {
 	// Between
@@ -216,8 +342,6 @@ func (mq *MediaQuery) Apply() []vecty.List {
 	for _, c := range mq.Common {
 		ret = append(ret, c)
 	}
-
-	// for _, s := range
 
 	return nil
 }

@@ -24,6 +24,15 @@ type Proxy struct {
 	DB *storm.DB
 }
 
+// NewProxy is our proxy constructor.
+func NewProxy(path string) (*Proxy, error) {
+	db, err := storm.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return &Proxy{db}, nil
+}
+
 // assert that Proxy is a server.ProxyServer at compile time.
 var _ server.ProxyServer = (*Proxy)(nil)
 
@@ -45,7 +54,7 @@ func (p *Proxy) State(_ context.Context, req *server.StateRequest) (*server.Prox
 		resp.Backends = append(resp.Backends, b.AsBackendT())
 	}
 
-	return nil, nil
+	return &resp, nil
 }
 
 // Put adds a backend to our pool of proxied Backends.
@@ -97,7 +106,7 @@ func (p *Proxy) Remove(context.Context, *server.BackendT) (*server.OpResult, err
 // BackendData is our type for the storm ORM. We can define field-level
 // constraints and indexes on struct tags.
 type BackendData struct {
-	ID     int
+	ID     int    `storm:"id,increment"`
 	Domain string `storm:"unique"`
 	IPs    []string
 }

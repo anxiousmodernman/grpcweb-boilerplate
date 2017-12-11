@@ -5,6 +5,7 @@ package main
 
 import (
 	"crypto/tls"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -39,8 +40,15 @@ func init() {
 }
 
 func main() {
+
+	// Proxy is our code that implements generated interface for server.
+	prxy, err := backend.NewProxy("co-chair.db")
+	if err != nil {
+		log.Fatalf("proxy init: %v", err)
+	}
+
 	gs := grpc.NewServer()
-	server.RegisterProxyServer(gs, &backend.Proxy{})
+	server.RegisterProxyServer(gs, prxy)
 	wrappedServer := grpcweb.WrapServer(gs)
 
 	clientCreds, err := credentials.NewClientTLSFromFile("./cert.pem", "")
