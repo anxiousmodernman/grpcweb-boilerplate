@@ -5,19 +5,29 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
+	"html/template"
 	"log"
+	"math"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	jwtmiddleware "github.com/auth0/go-jwt-middleware"
 	jwt "github.com/dgrijalva/jwt-go"
+
+	"github.com/anxiousmodernman/goth"
+	"github.com/anxiousmodernman/goth/gothic"
+	"github.com/anxiousmodernman/goth/providers/auth0"
 	"github.com/gorilla/pat"
+	"github.com/gorilla/sessions"
 	"github.com/gorilla/websocket"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/johanbrandhorst/protobuf/wsproxy"
 	"github.com/sirupsen/logrus"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
@@ -41,9 +51,42 @@ func init() {
 	})
 	// Should only be done from init functions
 	grpclog.SetLoggerV2(grpclog.NewLoggerV2(logger.Out, logger.Out, logger.Out))
+
+	// GOTH INIT
+	store := sessions.NewFilesystemStore(os.TempDir(), []byte("goth-example"))
+
+	// set the maxLength of the cookies stored on the disk to a larger number to prevent issues with:
+	// securecookie: the value is too long
+	// when using OpenID Connect , since this can contain a large amount of extra information in the id_token
+
+	// Note, when using the FilesystemStore only the session.ID is written to a browser cookie, so this is explicit for the storage on disk
+	store.MaxLength(math.MaxInt64)
+
+	gothic.Store = store
 }
 
 func main() {
+
+	/* GOTH STUFF */
+	goth.UseProviders(
+		//Auth0 allocates domain per customer, a domain must be provided for auth0 to work
+		auth0.New(
+			os.Getenv("COCHAIR_AUTH0_CLIENTID"),
+			os.Getenv("COCHAIR_AUTH0_SECRET"), "https://localhost:2016/auth/auth0/callback",
+			os.Getenv("COCHAIR_AUTH0_DOMAIN")),
+	)
+
+	m := make(map[string]string)
+	m["auth0"] = "Auth0"
+
+	var ks []string
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+
+	providerIndex := &ProviderIndex{Providers: ks, ProvidersMap: m}
+	/* GOTH STUFF */
 
 	// Proxy is our code that implements generated interface for server.
 	prxy, err := backend.NewProxy("co-chair.db")
@@ -66,7 +109,42 @@ func main() {
 		wsproxy.WithTransportCredentials(clientCreds))
 
 	p := pat.New()
-	_ = p
+	p.Get("/auth/{provider}/callback", func(res http.ResponseWriter, req *http.Request) {
+
+		user, err := gothic.CompleteUserAuth(res, req)
+		if err != nil {
+			fmt.Fprintln(res, err)
+			return
+		}
+		t, _ := template.New("foo").Parse(userTemplate)
+		t.Execute(res, user)
+	})
+
+	p.Get("/logout/{provider}", func(res http.ResponseWriter, req *http.Request) {
+		gothic.Logout(res, req)
+		res.Header().Set("Location", "/")
+		res.WriteHeader(http.StatusTemporaryRedirect)
+	})
+
+	p.Get("/auth/{provider}", func(res http.ResponseWriter, req *http.Request) {
+		// try to get the user without re-authenticating
+		logger.Debug("/auth/auth0")
+		if gothUser, err := gothic.CompleteUserAuth(res, req); err == nil {
+			logger.Debug("after gothic.CompleteUserAuth")
+			t, _ := template.New("foo").Parse(userTemplate)
+			t.Execute(res, gothUser)
+		} else {
+			logger.Debug("else")
+			gothic.BeginAuthHandler(res, req)
+			logger.Debug("after BeginAuthHandler")
+		}
+		logger.Debug("all done?")
+	})
+
+	p.Get("/", func(res http.ResponseWriter, req *http.Request) {
+		t, _ := template.New("foo").Parse(indexTemplate)
+		t.Execute(res, providerIndex)
+	})
 
 	handler := func(resp http.ResponseWriter, req *http.Request) {
 		// Redirect gRPC and gRPC-Web requests to the gRPC-Web Websocket Proxy server
@@ -99,11 +177,12 @@ func main() {
 		h = http.HandlerFunc(handler)
 		// https://dsasf.auth0.com/login?client=xxx
 	}
+	_ = h
 
 	addr := "localhost:2016"
 	httpsSrv := &http.Server{
 		Addr:    addr,
-		Handler: h,
+		Handler: p,
 		// Some security settings
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
@@ -117,5 +196,28 @@ func main() {
 	}
 
 	logger.Info("Serving on https://" + addr)
-	logger.Fatal(httpsSrv.ListenAndServeTLS("./cert.pem", "./key.pem"))
+	logger.Fatal("handler exit: %v", httpsSrv.ListenAndServeTLS("./cert.pem", "./key.pem"))
+}
+
+var indexTemplate = `{{range $key,$value:=.Providers}}
+<p><a href="/auth/{{$value}}">Log in with {{index $.ProvidersMap $value}}</a></p>
+{{end}}`
+
+var userTemplate = `
+<p><a href="/logout/{{.Provider}}">logout</a></p>
+<p>Name: {{.Name}} [{{.LastName}}, {{.FirstName}}]</p>
+<p>Email: {{.Email}}</p>
+<p>NickName: {{.NickName}}</p>
+<p>Location: {{.Location}}</p>
+<p>AvatarURL: {{.AvatarURL}} <img src="{{.AvatarURL}}"></p>
+<p>Description: {{.Description}}</p>
+<p>UserID: {{.UserID}}</p>
+<p>AccessToken: {{.AccessToken}}</p>
+<p>ExpiresAt: {{.ExpiresAt}}</p>
+<p>RefreshToken: {{.RefreshToken}}</p>
+`
+
+type ProviderIndex struct {
+	Providers    []string
+	ProvidersMap map[string]string
 }
