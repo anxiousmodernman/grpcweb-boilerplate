@@ -5,6 +5,7 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -128,17 +129,12 @@ func main() {
 
 	p.Get("/auth/{provider}", func(res http.ResponseWriter, req *http.Request) {
 		// try to get the user without re-authenticating
-		logger.Debug("/auth/auth0")
 		if gothUser, err := gothic.CompleteUserAuth(res, req); err == nil {
-			logger.Debug("after gothic.CompleteUserAuth")
 			t, _ := template.New("foo").Parse(userTemplate)
 			t.Execute(res, gothUser)
 		} else {
-			logger.Debug("else")
 			gothic.BeginAuthHandler(res, req)
-			logger.Debug("after BeginAuthHandler")
 		}
-		logger.Debug("all done?")
 	})
 
 	p.Get("/", func(res http.ResponseWriter, req *http.Request) {
@@ -150,6 +146,8 @@ func main() {
 		// Redirect gRPC and gRPC-Web requests to the gRPC-Web Websocket Proxy server
 		if req.ProtoMajor == 2 && strings.Contains(req.Header.Get("Content-Type"), "application/grpc") ||
 			websocket.IsWebSocketUpgrade(req) {
+			// auth?
+
 			wsproxy.ServeHTTP(resp, req)
 		} else {
 			// Serve the GopherJS client
@@ -165,6 +163,14 @@ func main() {
 			ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
 				return []byte(os.Getenv("COCHAIR_AUTH0_SECRET")), nil
 			},
+			Extractor: extractor, // type TokenExtractor
+			// TokenExtractor is a function that takes a request as input and returns
+			// either a token or an error.  An error should only be returned if an attempt
+			// to specify a token was found, but the information was somehow incorrectly
+			// formed.  In the case where a token is simply not present, this should not
+			// be treated as an error.  An empty string should be returned in that case.
+			//type TokenExtractor func(r *http.Request) (string, error)
+
 			// When set, the middleware verifies that tokens are signed with the
 			// specific signing algorithm If the signing method is not constant
 			// the ValidationKeyGetter callback can be used to implement additional checks
@@ -172,6 +178,7 @@ func main() {
 			// https://auth0.com/blog/2015/03/31/critical-vulnerabilities-in-json-web-token-libraries/
 			SigningMethod: jwt.SigningMethodHS256,
 		})
+
 		h = jwtMiddleware.Handler(http.HandlerFunc(handler))
 	} else {
 		h = http.HandlerFunc(handler)
@@ -182,7 +189,7 @@ func main() {
 	addr := "localhost:2016"
 	httpsSrv := &http.Server{
 		Addr:    addr,
-		Handler: p,
+		Handler: h, //p,
 		// Some security settings
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
@@ -197,6 +204,7 @@ func main() {
 
 	logger.Info("Serving on https://" + addr)
 	logger.Fatal("handler exit: %v", httpsSrv.ListenAndServeTLS("./cert.pem", "./key.pem"))
+
 }
 
 var indexTemplate = `{{range $key,$value:=.Providers}}
@@ -220,4 +228,16 @@ var userTemplate = `
 type ProviderIndex struct {
 	Providers    []string
 	ProvidersMap map[string]string
+}
+
+func extractor(req *http.Request) (string, error) {
+	if req == nil {
+		return "", errors.New("no http request provided")
+	}
+
+	c, err := req.Cookie("auth0_gothic_session")
+	if err != nil {
+		return "", fmt.Errorf("cookie read: %v", err)
+	}
+	return c.Value, nil
 }

@@ -48,3 +48,17 @@ GopherJS. Please explore the tutorials and wiki pages on
 https://github.com/gopherjs/gopherjs and check out frameworks such as
 https://myitcv.io/react and https://github.com/gopherjs/vecty for
 a better way to write GopherJS apps.
+
+
+
+## Endpoints
+
+"/" - load the page/SPA - 401 - redirect to "click here to login page"
+
+"/auth/auth0" - middleware lets you through - initiate auth0 - redir to auth0 hoste login page with callback...
+
+"/auth/auth0/callback" - middleware protects - congrats!
+
+"/auth/auth0/logout" - middleware protects - calls to backend
+
+
